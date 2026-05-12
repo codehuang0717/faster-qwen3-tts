@@ -51,6 +51,7 @@ import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -64,11 +65,20 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="faster-qwen3-tts OpenAI-compatible API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 tts_model = None
 voices: dict = {}
 default_voice: Optional[str] = None
 SAMPLE_RATE = 24000  # updated once the model loads
 _model_lock = threading.Lock()  # prevent concurrent GPU inference
+_SERVER_CONFIG: dict = {}      # global tunables from CLI
 
 # ---------------------------------------------------------------------------
 # Request / response models
@@ -81,6 +91,7 @@ class SpeechRequest(BaseModel):
     voice: str = "alloy"
     response_format: str = "wav"  # wav | pcm | mp3
     speed: float = 1.0           # accepted but not yet applied
+    instruct: str = ""           # new field for tone/emotion instructions
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +179,14 @@ def resolve_voice(voice_name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def _stream_chunks(voice_cfg: dict, text: str) -> AsyncGenerator[bytes, None]:
+async def _stream_chunks(voice_cfg: dict, text: str, instruct: str = "") -> AsyncGenerator[bytes, None]:
     """
     Run generate_voice_clone_streaming in a background thread and yield
     raw PCM bytes for each chunk as they arrive.
     """
     q: queue.Queue = queue.Queue()
     _DONE = object()
+    cancel_event = threading.Event()
 
     def producer():
         try:
@@ -184,9 +196,14 @@ async def _stream_chunks(voice_cfg: dict, text: str) -> AsyncGenerator[bytes, No
                     language=voice_cfg.get("language", "Auto"),
                     ref_audio=voice_cfg["ref_audio"],
                     ref_text=voice_cfg.get("ref_text", ""),
-                    chunk_size=voice_cfg.get("chunk_size", 12),
+                    instruct=instruct if instruct else None,
+                    chunk_size=voice_cfg.get("chunk_size", _SERVER_CONFIG.get("chunk_size", 12)),
+                    xvec_only=voice_cfg.get("xvec_only", _SERVER_CONFIG.get("xvec_only", False)),
                     non_streaming_mode=False,
                 ):
+                    if cancel_event.is_set():
+                        logger.info("Client disconnected, aborting TTS generation early.")
+                        break
                     q.put(chunk)
         except Exception as exc:
             q.put(exc)
@@ -197,13 +214,17 @@ async def _stream_chunks(voice_cfg: dict, text: str) -> AsyncGenerator[bytes, No
     thread.start()
 
     loop = asyncio.get_event_loop()
-    while True:
-        item = await loop.run_in_executor(None, q.get)
-        if item is _DONE:
-            break
-        if isinstance(item, Exception):
-            raise item
-        yield _to_pcm16(item)
+    try:
+        while True:
+            item = await loop.run_in_executor(None, q.get)
+            if item is _DONE:
+                break
+            if isinstance(item, Exception):
+                raise item
+            yield _to_pcm16(item)
+    except asyncio.CancelledError:
+        cancel_event.set()
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +243,12 @@ async def create_speech(req: SpeechRequest):
         raise HTTPException(status_code=503, detail="Model not loaded")
     if not req.input.strip():
         raise HTTPException(status_code=400, detail="'input' text is empty")
+
+    text_input = req.input.strip()
+    # Appending punctuation forces the model to generate a pause at the end, 
+    # preventing the vocoder sliding window from swallowing the last word
+    if text_input[-1] not in ".。!！?？…":
+        text_input += "。"
 
     voice_cfg = resolve_voice(req.voice)
     fmt = req.response_format.lower()
@@ -245,10 +272,12 @@ async def create_speech(req: SpeechRequest):
         def _generate():
             with _model_lock:
                 return tts_model.generate_voice_clone(
-                    text=req.input,
+                    text=text_input,
                     language=voice_cfg.get("language", "Auto"),
                     ref_audio=voice_cfg["ref_audio"],
                     ref_text=voice_cfg.get("ref_text", ""),
+                    instruct=req.instruct if req.instruct else None,
+                    xvec_only=voice_cfg.get("xvec_only", _SERVER_CONFIG.get("xvec_only", False)),
                 )
 
         audio_arrays, sr = await loop.run_in_executor(None, _generate)
@@ -259,7 +288,7 @@ async def create_speech(req: SpeechRequest):
     async def audio_stream():
         if fmt == "wav":
             yield _wav_header(SAMPLE_RATE)  # stream with unknown data length
-        async for raw_chunk in _stream_chunks(voice_cfg, req.input):
+        async for raw_chunk in _stream_chunks(voice_cfg, text_input, req.instruct):
             yield raw_chunk
 
     return StreamingResponse(audio_stream(), media_type=content_type)
@@ -306,7 +335,58 @@ def _parse_args():
     p.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     p.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
     p.add_argument("--device", default="cuda", help="Torch device (default: cuda)")
+    p.add_argument(
+        "--max-seq-len",
+        type=int,
+        default=2048,
+        help="Maximum sequence length for CUDA graph static cache (default: 2048)",
+    )
+    p.add_argument(
+        "--chunk-size",
+        type=int,
+        default=12,
+        help="Streaming chunk size in tokens (default: 12)",
+    )
+    p.add_argument(
+        "--xvec-only",
+        action="store_true",
+        help="Use x-vector only voice cloning by default (skips acoustic context)",
+    )
+    p.add_argument(
+        "--attn-implementation",
+        default="sdpa",
+        choices=["sdpa", "flash_attention_2"],
+        help="Attention implementation (default: sdpa)",
+    )
+    p.add_argument(
+        "--warmup",
+        action="store_true",
+        help="Warmup CUDA graphs with a dummy request on start",
+    )
     return p.parse_args()
+
+
+def warmup_model(model, voices: dict):
+    """Run a dummy inference to capture CUDA graphs before first request."""
+    if not voices:
+        return
+    logger.info("Performing warmup inference...")
+    voice_name = next(iter(voices))
+    voice_cfg = voices[voice_name]
+    try:
+        # Use a short text for warmup
+        for _ in model.generate_voice_clone_streaming(
+            text="Warmup.",
+            language=voice_cfg.get("language", "English"),
+            ref_audio=voice_cfg["ref_audio"],
+            ref_text=voice_cfg.get("ref_text", ""),
+            chunk_size=1,
+            xvec_only=True,
+        ):
+            pass
+        logger.info("Warmup complete.")
+    except Exception as e:
+        logger.warning("Warmup failed: %s", e)
 
 
 def main():
@@ -316,7 +396,7 @@ def main():
 
     # Build voice registry
     if args.voices:
-        with open(args.voices) as f:
+        with open(args.voices, encoding="utf-8") as f:
             voices = json.load(f)
         default_voice = next(iter(voices))
         logger.info("Loaded %d voice(s) from %s", len(voices), args.voices)
@@ -339,13 +419,22 @@ def main():
 
     from faster_qwen3_tts import FasterQwen3TTS
 
+    _SERVER_CONFIG["chunk_size"] = args.chunk_size
+    _SERVER_CONFIG["xvec_only"] = args.xvec_only
+
     logger.info("Loading model %s on %s …", args.model, args.device)
     tts_model = FasterQwen3TTS.from_pretrained(
         args.model,
         device=args.device,
         dtype=torch.bfloat16,
+        max_seq_len=args.max_seq_len,
+        attn_implementation=args.attn_implementation,
     )
     SAMPLE_RATE = tts_model.sample_rate
+
+    if args.warmup:
+        warmup_model(tts_model, voices)
+
     logger.info("Model ready. Sample rate: %d Hz", SAMPLE_RATE)
     logger.info("Server listening on http://%s:%d", args.host, args.port)
 
