@@ -20,6 +20,40 @@ pip install faster-qwen3-tts
 pip install "torch==2.5.1" "torchaudio==2.5.1" --index-url https://download.pytorch.org/whl/cu124
 ```
 
+### Experimental GGML backend
+
+There is an experimental adapter for Pascal's `qwentts.cpp` runtime. The
+current Torch/CUDA-graph backend remains the default; GGML is opt-in and
+uses a separate native wheel package so the main install path stays simple.
+
+```bash
+pip install "faster-qwen3-tts[ggml]"
+
+faster-qwen3-tts --backend ggml --quant BF16 design \
+  --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign \
+  --instruct "Warm, confident narrator" \
+  --text "Welcome to the show." \
+  --language English \
+  --output out.wav
+```
+
+See [`docs/ggml-backend.md`](docs/ggml-backend.md) for the native wrapper
+package and wheel build details.
+
+Cached qwentts.cpp voice-clone references are supported when you already have
+`.spk` speaker latents, and optional `.rvq` acoustic latents for ICL:
+
+```bash
+faster-qwen3-tts --backend ggml --quant BF16 clone \
+  --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
+  --ref-spk freeman.spk \
+  --ref-rvq freeman.rvq \
+  --ref-text "$(cat freeman.txt)" \
+  --text "Cached references skip reference audio encoding on every request." \
+  --language English \
+  --output out.wav
+```
+
 ## Quick Start
 
 ### Python
