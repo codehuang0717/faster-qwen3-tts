@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ggml = [
-    "qwentts-cpp-python>=0.1.0a1",
+    "qwentts-cpp-python>=0.2.0",
 ]
 demo = [
     "fastapi>=0.100.0",
@@ -52,6 +52,3 @@ faster-qwen3-tts = "faster_qwen3_tts.cli:main"
 [project.urls]
 Homepage = "https://github.com/andimarafioti/faster-qwen3-tts"
 Repository = "https://github.com/andimarafioti/faster-qwen3-tts"
-
-[tool.uv.sources]
-qwentts-cpp-python = { git = "https://github.com/andimarafioti/qwentts-cpp-python", branch = "main" }

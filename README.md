@@ -37,8 +37,18 @@ faster-qwen3-tts --backend ggml --quant BF16 design \
   --output out.wav
 ```
 
+The extra installs `qwentts-cpp-python>=0.2.0` from PyPI. That default wheel is
+CUDA 12.8. For CUDA 13 / DGX Spark or CUDA 12.4 targets, install the matching
+wrapper wheel from the Hugging Face wheelhouse before installing the extra:
+
+```bash
+pip install "qwentts-cpp-python==0.2.0+cu130" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/resolve/main/whl/cu130.html
+pip install "faster-qwen3-tts[ggml]"
+```
+
 See [`docs/ggml-backend.md`](docs/ggml-backend.md) for the native wrapper
-package and wheel build details.
+package and wheel selection details.
 
 Cached qwentts.cpp voice-clone references are supported when you already have
 `.spk` speaker latents, and optional `.rvq` acoustic latents for ICL:

@@ -24,6 +24,8 @@ def _load_model(args):
             gguf_talker_path=args.gguf_model,
             gguf_codec_path=args.gguf_codec,
             qwentts_library_path=args.qwentts_lib,
+            qwentts_use_fa=args.qwentts_use_fa,
+            qwentts_clamp_fp16=args.qwentts_clamp_fp16,
         )
 
     if dtype == "bf16":
@@ -355,6 +357,18 @@ def build_parser():
     p.add_argument("--gguf-model", help="Local qwentts.cpp talker GGUF path")
     p.add_argument("--gguf-codec", help="Local qwentts.cpp codec GGUF path")
     p.add_argument("--qwentts-lib", help="Explicit path to libqwen shared library")
+    p.add_argument(
+        "--qwentts-no-fa",
+        dest="qwentts_use_fa",
+        action="store_false",
+        help="Disable qwentts.cpp flash-attention kernels for --backend ggml",
+    )
+    p.add_argument(
+        "--qwentts-clamp-fp16",
+        action="store_true",
+        help="Enable qwentts.cpp fp16 clamping for --backend ggml",
+    )
+    p.set_defaults(qwentts_use_fa=True, qwentts_clamp_fp16=False)
     sub = p.add_subparsers(dest="command", required=True)
 
     def add_common(sp):

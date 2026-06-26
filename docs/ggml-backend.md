@@ -24,11 +24,24 @@ The main package stays installable without native binaries:
 pip install faster-qwen3-tts
 ```
 
-The GGML backend is opt-in:
+The GGML backend is opt-in. By default this installs the PyPI
+`qwentts-cpp-python` wheel, currently the CUDA 12.8 build:
 
 ```bash
 pip install "faster-qwen3-tts[ggml]"
 ```
+
+Install a backend-specific wrapper wheel first when the PyPI CUDA 12.8 wheel is
+not the right runtime for the machine, then install this package as usual:
+
+```bash
+pip install "qwentts-cpp-python==0.2.0+cu130" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/resolve/main/whl/cu130.html
+pip install "faster-qwen3-tts[ggml]"
+```
+
+The same wheel index also has `0.2.0+cu124`, `0.2.0+cu128`, and `0.2.0+cpu`
+variants.
 
 For local wrapper development, clone the wrapper repo beside this checkout and
 install it in editable mode:
@@ -153,36 +166,41 @@ MODEL_SIZE=0.6B QUANT=BF16 ./benchmark.sh backend-base
 
 The legacy CUDA-graph-only benchmarks still run with `./benchmark.sh`.
 
-## Wheel Build
+## Wheel Distribution
 
-Build native libraries into the wrapper package:
+`qwentts-cpp-python==0.2.0` is published on PyPI. The PyPI package is the
+default CUDA 12.8 wheel used by `pip install "faster-qwen3-tts[ggml]"`.
+Additional local-version wheels are hosted on Hugging Face Hub:
 
 ```bash
-cd ../qwentts-cpp-python
-python scripts/build_native.py --source /path/to/qwentts.cpp --backend cuda --clean
-QWENTTS_CPP_WHEEL_BUILD_TAG=1cu130 python -m build --wheel
+pip install "qwentts-cpp-python==0.2.0+cpu" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/resolve/main/whl/cpu.html
+
+pip install "qwentts-cpp-python==0.2.0+cu124" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/resolve/main/whl/cu124.html
+
+pip install "qwentts-cpp-python==0.2.0+cu128" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/resolve/main/whl/cu128.html
+
+pip install "qwentts-cpp-python==0.2.0+cu130" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/resolve/main/whl/cu130.html
 ```
 
-The build script copies `libqwen` and `libggml*` into
-`src/qwentts_cpp/lib/`. The package marks itself as a binary distribution
-so the wheel receives a platform tag instead of `py3-none-any`.
+Hugging Face raw file hosting is used as a `--find-links` wheelhouse rather
+than a PyTorch-style package index. For CUDA 13 / DGX Spark, install the
+`+cu130` wheel before installing `faster-qwen3-tts[ggml]`.
 
-The first public release should be CUDA-first. `faster-qwen3-tts` already
-requires CUDA for its existing fast path, so a CPU-only native wheel would be
-surprising and not very useful for the main package audience.
-
-For public CUDA wheels, use the manual GitHub Actions workflow:
+For publishing new wrapper wheels, use the manual GitHub Actions workflow:
 
 ```text
-andimarafioti/qwentts-cpp-python:.github/workflows/wheels.yml
+andimarafioti/qwentts-cpp-python:.github/workflows/publish-hf-wheels.yml
 ```
 
-The workflow builds both Linux x86_64 and Linux aarch64 CUDA wheels as artifacts.
-It installs the CUDA toolkit on GitHub-hosted runners and compiles explicit CUDA
-architectures, so no GPU is required at build time. Download the artifacts and
-test them locally on representative CUDA machines before upload.
+The workflow builds Linux x86_64 and Linux aarch64 wheels for CPU, CUDA 12.4,
+CUDA 12.8, and CUDA 13.0, then uploads static wheel index pages to the HF
+dataset.
 
-Local reproduction mirrors the workflow:
+Local development builds still use the wrapper build script:
 
 ```bash
 cd ../qwentts-cpp-python
@@ -192,34 +210,10 @@ python scripts/build_native.py \
   --clean \
   --cmake-arg=-G \
   --cmake-arg=Ninja \
-  --cmake-arg="-DCMAKE_CUDA_ARCHITECTURES=75-virtual;80-virtual;86-real;89-real;120a-real;121a-real"
-QWENTTS_CPP_WHEEL_BUILD_TAG=1cu130 python -m build --wheel
+  --cmake-arg="-DCMAKE_CUDA_ARCHITECTURES=75-virtual;80-real;86-real;90-real;121-real"
+python -m build --wheel
 ```
-
-Recommended first wheel targets:
-
-- Linux x86_64 CUDA from GitHub Actions
-- Linux aarch64 CUDA from GitHub Actions
-- CPU wheels only as a later fallback package or dev artifact
 
 CUDA-linked `libqwen` depends on CUDA runtime libraries and an NVIDIA driver at
-runtime. That is acceptable for `faster-qwen3-tts[ggml]`, but it means CPU and
-CUDA artifacts should not be uploaded with the same package name, version, and
-platform compatibility tag unless the wheel contains a loader that can select
-between both backends. For local wheelhouses, set a build tag so artifacts do
-not overwrite each other:
-
-```bash
-# CUDA artifact
-python scripts/build_native.py --source /path/to/qwentts.cpp --backend cuda --clean
-QWENTTS_CPP_WHEEL_BUILD_TAG=1cu130 python -m build --wheel
-
-# Optional CPU dev artifact
-python scripts/build_native.py --source /path/to/qwentts.cpp --backend cpu --clean
-QWENTTS_CPP_WHEEL_BUILD_TAG=1cpu python -m build --wheel
-```
-
-For PyPI, CUDA-only under `qwentts-cpp-python` is coherent with this project:
-pip will choose the platform wheel automatically, and users choose only the
-`faster-qwen3-tts[ggml]` extra. CPU support can be a separate distribution or a
-future combined wheel if there is demand.
+runtime. Choose the wrapper wheel that matches the runtime and GPU target first;
+the `faster-qwen3-tts` package only selects the Python adapter.

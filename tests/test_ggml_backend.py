@@ -4,6 +4,8 @@ import types
 import numpy as np
 import pytest
 
+from faster_qwen3_tts import FasterQwen3TTS
+from faster_qwen3_tts.cli import build_parser
 from faster_qwen3_tts.ggml_backend import GGMLQwen3TTS
 
 
@@ -127,3 +129,134 @@ def test_ggml_speaker_listing_uses_runtime():
     model = GGMLQwen3TTS(_FakeRuntime())
 
     assert model.get_supported_speakers() == ["aiden", "vivian"]
+
+
+def test_adapter_from_pretrained_forwards_qwentts_runtime_flags(monkeypatch, qwentts_cpp_stub):
+    captured = {}
+
+    class FakeQwenTTS:
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return _FakeRuntime()
+
+    qwentts_cpp_stub.QwenTTS = FakeQwenTTS
+
+    model = GGMLQwen3TTS.from_pretrained(
+        "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        quant="Q4_K_M",
+        cache_dir=".cache/qwentts",
+        local_files_only=True,
+        library_path="libqwen.so",
+        use_fa=False,
+        clamp_fp16=True,
+    )
+
+    assert isinstance(model, GGMLQwen3TTS)
+    assert captured["args"] == ("Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",)
+    assert captured["kwargs"] == {
+        "quant": "Q4_K_M",
+        "cache_dir": ".cache/qwentts",
+        "local_files_only": True,
+        "library_path": "libqwen.so",
+        "use_fa": False,
+        "clamp_fp16": True,
+    }
+
+
+def test_public_from_pretrained_forwards_qwentts_runtime_flags(monkeypatch):
+    captured = {}
+    sentinel = object()
+
+    def fake_from_pretrained(cls, *args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return sentinel
+
+    monkeypatch.setattr(
+        GGMLQwen3TTS,
+        "from_pretrained",
+        classmethod(fake_from_pretrained),
+    )
+
+    result = FasterQwen3TTS.from_pretrained(
+        "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        backend="ggml",
+        quant="Q8_0",
+        cache_dir=".cache/qwentts",
+        local_files_only=True,
+        qwentts_library_path="libqwen.so",
+        qwentts_use_fa=False,
+        qwentts_clamp_fp16=True,
+    )
+
+    assert result is sentinel
+    assert captured["args"] == ("Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",)
+    assert captured["kwargs"] == {
+        "quant": "Q8_0",
+        "cache_dir": ".cache/qwentts",
+        "local_files_only": True,
+        "library_path": "libqwen.so",
+        "use_fa": False,
+        "clamp_fp16": True,
+    }
+
+
+def test_public_from_gguf_forwards_qwentts_runtime_flags(monkeypatch):
+    captured = {}
+    sentinel = object()
+
+    def fake_from_gguf(cls, *args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return sentinel
+
+    monkeypatch.setattr(
+        GGMLQwen3TTS,
+        "from_gguf",
+        classmethod(fake_from_gguf),
+    )
+
+    result = FasterQwen3TTS.from_pretrained(
+        "unused",
+        backend="qwentts",
+        gguf_talker_path="talker.gguf",
+        gguf_codec_path="codec.gguf",
+        qwentts_library_path="libqwen.so",
+        qwentts_use_fa=False,
+        qwentts_clamp_fp16=True,
+    )
+
+    assert result is sentinel
+    assert captured["args"] == ("talker.gguf", "codec.gguf")
+    assert captured["kwargs"] == {
+        "library_path": "libqwen.so",
+        "use_fa": False,
+        "clamp_fp16": True,
+    }
+
+
+def test_cli_parses_qwentts_runtime_flags():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "--backend",
+            "ggml",
+            "--qwentts-no-fa",
+            "--qwentts-clamp-fp16",
+            "design",
+            "--model",
+            "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+            "--instruct",
+            "warm voice",
+            "--text",
+            "hello",
+            "--output",
+            "out.wav",
+        ]
+    )
+
+    assert args.qwentts_use_fa is False
+    assert args.qwentts_clamp_fp16 is True

@@ -116,6 +116,8 @@ class FasterQwen3TTS:
         gguf_talker_path: Optional[Union[str, Path]] = None,
         gguf_codec_path: Optional[Union[str, Path]] = None,
         qwentts_library_path: Optional[Union[str, Path]] = None,
+        qwentts_use_fa: bool = True,
+        qwentts_clamp_fp16: bool = False,
         cache_dir: Optional[Union[str, Path]] = None,
         local_files_only: bool = False,
     ):
@@ -134,12 +136,14 @@ class FasterQwen3TTS:
             gguf_talker_path: Optional local qwentts.cpp talker GGUF path.
             gguf_codec_path: Optional local qwentts.cpp codec GGUF path.
             qwentts_library_path: Optional explicit path to libqwen.
+            qwentts_use_fa: Whether qwentts.cpp should use flash-attention kernels.
+            qwentts_clamp_fp16: Whether qwentts.cpp should clamp fp16 operations.
             
         Returns:
             FasterQwen3TTS instance
         """
         if backend not in ("torch", "ggml", "qwentts"):
-            raise ValueError(f"Unsupported backend {backend!r}. Expected 'torch' or 'ggml'.")
+            raise ValueError(f"Unsupported backend {backend!r}. Expected 'torch', 'ggml', or 'qwentts'.")
 
         if backend in ("ggml", "qwentts"):
             from .ggml_backend import GGMLQwen3TTS
@@ -151,6 +155,8 @@ class FasterQwen3TTS:
                     gguf_talker_path,
                     gguf_codec_path,
                     library_path=qwentts_library_path,
+                    use_fa=qwentts_use_fa,
+                    clamp_fp16=qwentts_clamp_fp16,
                 )
 
             return GGMLQwen3TTS.from_pretrained(
@@ -159,6 +165,8 @@ class FasterQwen3TTS:
                 cache_dir=cache_dir,
                 local_files_only=local_files_only,
                 library_path=qwentts_library_path,
+                use_fa=qwentts_use_fa,
+                clamp_fp16=qwentts_clamp_fp16,
             )
 
         if isinstance(dtype, str):

@@ -306,7 +306,7 @@ class GGMLQwen3TTS:
         )
         if load_rvq_codes is None:
             raise NotImplementedError(
-                "Cached RVQ references require qwentts-cpp-python >= 0.1.0a1 "
+                "Cached RVQ references require qwentts-cpp-python >= 0.2.0 "
                 "and qwentts.cpp ABI v2."
             )
         return load_rvq_codes(ref_rvq)
