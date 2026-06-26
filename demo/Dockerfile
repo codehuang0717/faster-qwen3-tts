@@ -11,6 +11,8 @@ ENV DEMO_REQUIRE_LOGIN=1
 ENV USAGE_BUCKET_MOUNT_PATH=/data
 ENV HOME=/tmp
 ENV TORCHINDUCTOR_CACHE_DIR=/tmp/torch_inductor
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
@@ -20,12 +22,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY . /app
 
-RUN python3 -m pip install --upgrade pip \
-    && python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchaudio \
-    && python3 -m pip install "qwentts-cpp-python==0.3.0+cu128" \
+RUN python3 -m venv "$VIRTUAL_ENV" \
+    && python -m pip install --upgrade pip \
+    && python -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchaudio \
+    && python -m pip install "qwentts-cpp-python==0.3.0+cu128" \
         -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/tree/main/whl/cu128 \
-    && python3 -m pip install "faster-qwen3-tts[demo] @ git+https://github.com/andimarafioti/faster-qwen3-tts.git@ggml-backend-integration" \
-    && python3 -m pip install -r requirements.txt
+    && python -m pip install "faster-qwen3-tts[demo] @ git+https://github.com/andimarafioti/faster-qwen3-tts.git@ggml-backend-integration" \
+    && python -m pip install -r requirements.txt
 
 EXPOSE 7860
 CMD ["python3", "server.py", "--host", "0.0.0.0"]
