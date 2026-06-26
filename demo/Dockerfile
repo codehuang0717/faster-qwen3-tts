@@ -30,8 +30,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
     && "$VIRTUAL_ENV/bin/python" -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchaudio \
     && "$VIRTUAL_ENV/bin/python" -m pip install "qwentts-cpp-python==0.3.0+cu128" \
         -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/tree/main/whl/cu128 \
-    && "$VIRTUAL_ENV/bin/python" -m pip install "faster-qwen3-tts[demo] @ git+https://github.com/andimarafioti/faster-qwen3-tts.git@ggml-backend-integration" \
-    && "$VIRTUAL_ENV/bin/python" -m pip install -r requirements.txt
+    && "$VIRTUAL_ENV/bin/python" -m pip install -c constraints.txt "faster-qwen3-tts[demo] @ git+https://github.com/andimarafioti/faster-qwen3-tts.git@ggml-backend-integration" \
+    && "$VIRTUAL_ENV/bin/python" -m pip install -c constraints.txt -r requirements.txt
 
 EXPOSE 7860
 CMD ["python", "server.py", "--host", "0.0.0.0"]
