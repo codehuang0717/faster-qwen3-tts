@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -22,7 +22,9 @@ COPY . /app
 
 RUN python3 -m pip install --upgrade pip \
     && python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchaudio \
-    && python3 -m pip install "faster-qwen3-tts[demo,ggml] @ git+https://github.com/andimarafioti/faster-qwen3-tts.git@ggml-backend-integration" \
+    && python3 -m pip install "qwentts-cpp-python==0.3.0+cu128" \
+        -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/tree/main/whl/cu128 \
+    && python3 -m pip install "faster-qwen3-tts[demo] @ git+https://github.com/andimarafioti/faster-qwen3-tts.git@ggml-backend-integration" \
     && python3 -m pip install -r requirements.txt
 
 EXPOSE 7860
