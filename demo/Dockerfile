@@ -25,7 +25,7 @@ COPY . /app
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
     && uv python install 3.10 \
-    && uv venv --python 3.10 "$VIRTUAL_ENV" \
+    && uv venv --python 3.10 --seed "$VIRTUAL_ENV" \
     && "$VIRTUAL_ENV/bin/python" -m pip install --upgrade pip \
     && "$VIRTUAL_ENV/bin/python" -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchaudio \
     && "$VIRTUAL_ENV/bin/python" -m pip install "qwentts-cpp-python==0.3.0+cu128" \
