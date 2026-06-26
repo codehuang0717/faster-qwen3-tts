@@ -660,6 +660,7 @@ _loading_key: ModelCacheKey | None = None
 _ref_cache: dict[str, str] = {}
 _ref_cache_lock = threading.Lock()
 _parakeet = None
+_parakeet_lock = asyncio.Lock()
 _generation_lock = asyncio.Lock()
 _generation_waiters: int = 0  # requests waiting for or holding the generation lock
 
@@ -792,8 +793,13 @@ async def transcribe_audio(
     audio: UploadFile = File(...),
 ):
     """Transcribe reference audio using nano-parakeet."""
+    global _parakeet
     if _parakeet is None:
-        raise HTTPException(status_code=503, detail="Transcription model not loaded")
+        async with _parakeet_lock:
+            if _parakeet is None:
+                print("Loading transcription model (nano-parakeet)...")
+                _parakeet = await asyncio.to_thread(_parakeet_from_pretrained, device="cuda")
+                print("Transcription model ready.")
 
     content = await audio.read()
     if len(content) > MAX_AUDIO_BYTES:
@@ -1323,7 +1329,7 @@ def main():
         _active_model_key = _startup_key
         print("TTS model ready.")
 
-        print("Loading transcription model (nano-parakeet)…")
+        print("Loading transcription model (nano-parakeet)...")
         _parakeet = _parakeet_from_pretrained(device="cuda")
         print("Transcription model ready.")
 

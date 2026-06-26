@@ -34,4 +34,4 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
     && "$VIRTUAL_ENV/bin/python" -m pip install -c constraints.txt -r requirements.txt
 
 EXPOSE 7860
-CMD ["python", "server.py", "--host", "0.0.0.0"]
+CMD ["python", "server.py", "--host", "0.0.0.0", "--no-preload"]
