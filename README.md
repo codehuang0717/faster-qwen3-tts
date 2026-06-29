@@ -318,6 +318,7 @@ The original Qwen3TTS implementation supports two mode of generation. It either 
 The public API uses `non_streaming_mode=None` as a sentinel, which preserves each method's upstream default unless you override it explicitly.
 `generate_voice_clone` and `generate_voice_clone_streaming` resolve `None` to `False`, matching upstream step-by-step text feeding during decode.
 `generate_custom_voice`, `generate_custom_voice_streaming`, `generate_voice_design`, and `generate_voice_design_streaming` resolve `None` to `True`, matching the upstream CustomVoice and VoiceDesign defaults.
+The GGML backend currently has no qwentts.cpp ABI switch for step-by-step text feeding; passing `non_streaming_mode=False` emits a warning and qwentts.cpp uses its native prompt layout.
 
 **Performance impact (RTX 4090, 1.7B, ICL, chunk_size=8):** TTFA is unchanged (≈159ms ± 1ms), and RTF is effectively the same (nsm=False: 4.87 ± 0.01, nsm=True: 4.85 ± 0.01).
 

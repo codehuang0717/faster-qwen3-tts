@@ -572,6 +572,12 @@ body {
   font-size: 11px; color: var(--dimmer);
   margin: -6px 0 8px 98px;
 }
+.s-hint.warn {
+  display: none;
+  color: #fcd34d;
+}
+:root[data-theme="light"] .s-hint.warn { color: #a16207; }
+.s-hint.warn.show { display: block; }
 
 /* Toggle */
 .toggle {
@@ -828,6 +834,7 @@ body {
         <div class="tog" data-nsm="1" onclick="setNonStreamingMode(true)">Prefill text</div>
       </div>
     </div>
+    <div class="s-hint warn" id="textFeedWarn">GGML ignores Step-by-step text feed and uses its native prompt layout.</div>
 
     <div class="s-section">Sampling</div>
     <div class="s-grid3">
@@ -988,6 +995,12 @@ function setNonStreamingMode(v) {
   nonStreamingMode = v;
   document.querySelectorAll('.tog[data-nsm]').forEach(el =>
     el.classList.toggle('on', el.dataset.nsm === (v ? '1' : '0')));
+  updateTextFeedWarning();
+}
+function updateTextFeedWarning() {
+  const el = $('textFeedWarn');
+  if (!el) return;
+  el.classList.toggle('show', selectedBackend === 'ggml' && !nonStreamingMode);
 }
 function defaultNonStreamingModeForModel(modelId) {
   return !!modelId && (modelId.includes('CustomVoice') || modelId.includes('VoiceDesign'));
@@ -1003,6 +1016,7 @@ function setBackend(backend, autoLoad = false) {
   if (!availableBackends.includes(backend)) return;
   selectedBackend = backend;
   updateBackendUI();
+  updateTextFeedWarning();
   if (autoLoad && loadedModel && !busy) loadModel().catch(() => {});
 }
 function applyAvailableBackends(backends, defaultBackend, activeBackend) {
@@ -1010,6 +1024,7 @@ function applyAvailableBackends(backends, defaultBackend, activeBackend) {
   selectedBackend = activeBackend || defaultBackend || selectedBackend;
   if (!availableBackends.includes(selectedBackend)) selectedBackend = availableBackends[0];
   updateBackendUI();
+  updateTextFeedWarning();
 }
 function updateBackendUI() {
   document.querySelectorAll('.tog[data-b]').forEach(el => {

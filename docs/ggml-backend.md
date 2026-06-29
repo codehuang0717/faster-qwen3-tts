@@ -135,7 +135,9 @@ The qwentts.cpp C ABI is already enough for buffered and streaming
 synthesis, voice cloning, CustomVoice, and VoiceDesign. These gaps remain
 before treating the backend as full parity:
 
-- no `non_streaming_mode` switch
+- no `non_streaming_mode` switch; requesting
+  `non_streaming_mode=False` emits a warning because qwentts.cpp ignores
+  that step-by-step text-feed mode and uses its native prompt layout
 - base-model `instruct` is rejected by qwentts.cpp
 - KV-cache length is fixed in qwentts.cpp
 

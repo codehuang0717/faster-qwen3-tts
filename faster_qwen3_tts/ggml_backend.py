@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import time
+import warnings
 from pathlib import Path
 from typing import Callable, Generator, Optional, Tuple, Union
 
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 _QWEN_FRAME_RATE = 24000 / 1920
 _VOICE_REF_CACHE_VERSION = 1
+_NON_PREFILL_TEXT_WARNING = (
+    "The GGML backend does not expose Qwen3-TTS step-by-step text feeding "
+    "(`non_streaming_mode=False`); qwentts.cpp ignores this option and uses "
+    "its native prompt layout."
+)
 
 
 def _require_qwentts_cpp():
@@ -73,6 +79,11 @@ def _path_identity(path: Union[str, Path]) -> str:
         return f"{p.resolve()}:{stat.st_size}:{stat.st_mtime_ns}"
     except OSError:
         return str(p)
+
+
+def _warn_non_prefill_text_mode(non_streaming_mode: Optional[bool]) -> None:
+    if non_streaming_mode is False:
+        warnings.warn(_NON_PREFILL_TEXT_WARNING, RuntimeWarning, stacklevel=3)
 
 
 class GGMLQwen3TTS:
@@ -174,6 +185,7 @@ class GGMLQwen3TTS:
         ref_codes: Optional[np.ndarray] = None,
         voice_clone_prompt=None,
     ) -> Tuple[list, int]:
+        _warn_non_prefill_text_mode(non_streaming_mode)
         if voice_clone_prompt is not None:
             raise NotImplementedError(
                 "The GGML backend cannot consume torch voice_clone_prompt objects; "
@@ -230,6 +242,7 @@ class GGMLQwen3TTS:
         ref_codes: Optional[np.ndarray] = None,
         voice_clone_prompt=None,
     ) -> Generator[Tuple[np.ndarray, int, dict], None, None]:
+        _warn_non_prefill_text_mode(non_streaming_mode)
         if voice_clone_prompt is not None:
             raise NotImplementedError(
                 "The GGML backend cannot consume torch voice_clone_prompt objects; "
@@ -501,6 +514,7 @@ class GGMLQwen3TTS:
         do_sample: bool = True,
         repetition_penalty: float = 1.05,
     ) -> Tuple[list, int]:
+        _warn_non_prefill_text_mode(non_streaming_mode)
         audio, sr = self.runtime.synthesize(
             text=text,
             lang=language,
@@ -531,6 +545,7 @@ class GGMLQwen3TTS:
         repetition_penalty: float = 1.05,
         chunk_size: int = 12,
     ) -> Generator[Tuple[np.ndarray, int, dict], None, None]:
+        _warn_non_prefill_text_mode(non_streaming_mode)
         adapter_start = time.perf_counter()
         yield from self._stream_runtime(
             text=text,
@@ -561,6 +576,7 @@ class GGMLQwen3TTS:
         do_sample: bool = True,
         repetition_penalty: float = 1.05,
     ) -> Tuple[list, int]:
+        _warn_non_prefill_text_mode(non_streaming_mode)
         audio, sr = self.runtime.synthesize(
             text=text,
             lang=language,
@@ -589,6 +605,7 @@ class GGMLQwen3TTS:
         repetition_penalty: float = 1.05,
         chunk_size: int = 12,
     ) -> Generator[Tuple[np.ndarray, int, dict], None, None]:
+        _warn_non_prefill_text_mode(non_streaming_mode)
         adapter_start = time.perf_counter()
         yield from self._stream_runtime(
             text=text,

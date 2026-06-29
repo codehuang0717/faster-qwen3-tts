@@ -1,5 +1,6 @@
 import sys
 import types
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -133,6 +134,73 @@ def test_cached_streaming_forwards_adapter_timing(qwentts_cpp_stub):
     _name, kwargs = runtime.calls[0]
     assert kwargs["codec_chunk_sec"] == pytest.approx(4 / 12.5)
     np.testing.assert_array_equal(kwargs["ref_spk_emb"], np.ones(3, dtype=np.float32))
+
+
+@pytest.mark.parametrize(
+    ("method_name", "kwargs", "streaming"),
+    [
+        (
+            "generate_voice_clone",
+            {"text": "hello", "language": "English", "ref_spk_emb": np.ones(3, dtype=np.float32)},
+            False,
+        ),
+        (
+            "generate_voice_clone_streaming",
+            {"text": "hello", "language": "English", "ref_spk_emb": np.ones(3, dtype=np.float32)},
+            True,
+        ),
+        (
+            "generate_custom_voice",
+            {"text": "hello", "speaker": "aiden", "language": "English"},
+            False,
+        ),
+        (
+            "generate_custom_voice_streaming",
+            {"text": "hello", "speaker": "aiden", "language": "English"},
+            True,
+        ),
+        (
+            "generate_voice_design",
+            {"text": "hello", "instruct": "warm voice", "language": "English"},
+            False,
+        ),
+        (
+            "generate_voice_design_streaming",
+            {"text": "hello", "instruct": "warm voice", "language": "English"},
+            True,
+        ),
+    ],
+)
+def test_ggml_warns_when_non_prefill_text_feed_is_requested(
+    qwentts_cpp_stub,
+    method_name,
+    kwargs,
+    streaming,
+):
+    model = GGMLQwen3TTS(_FakeRuntime())
+
+    with pytest.warns(RuntimeWarning, match="step-by-step text feeding"):
+        result = getattr(model, method_name)(non_streaming_mode=False, **kwargs)
+        if streaming:
+            next(result)
+
+
+def test_ggml_does_not_warn_for_prefill_text_feed(qwentts_cpp_stub):
+    model = GGMLQwen3TTS(_FakeRuntime())
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        model.generate_custom_voice(
+            text="hello",
+            speaker="aiden",
+            language="English",
+            non_streaming_mode=True,
+        )
+
+    assert not [
+        warning for warning in caught
+        if "step-by-step text feeding" in str(warning.message)
+    ]
 
 
 def test_raw_ref_audio_uses_memory_voice_ref_cache(monkeypatch, tmp_path):
