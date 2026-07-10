@@ -14,6 +14,64 @@ pip install faster-qwen3-tts
 
 **Blackwell note:** RTX 50xx / Blackwell GPUs need CUDA 12.8 PyTorch wheels. If the default setup fails on those cards, install a `cu128` PyTorch build (PyTorch 2.7+).
 
+**Driver / CUDA mismatch note (T4, A10G, and other CUDA-12.4 hosts):** `pip install` pulls the default PyTorch wheel, which is built against a recent CUDA toolkit. If your NVIDIA driver is *older* than that toolkit — common on CUDA 12.4 hosts such as AWS, Azure ML, and many Colab/T4 boxes — `torch.cuda.is_available()` returns `False` with `CUDA initialization: The NVIDIA driver on your system is too old`. Install a PyTorch wheel matching your driver's CUDA version. Check it with `nvidia-smi` (top-right "CUDA Version"); for a CUDA 12.4 driver:
+
+```bash
+pip install "torch==2.5.1" "torchaudio==2.5.1" --index-url https://download.pytorch.org/whl/cu124
+```
+
+### Experimental GGML backend
+
+There is an experimental adapter for Pascal's `qwentts.cpp` runtime. The
+current Torch/CUDA-graph backend remains the default; GGML is opt-in and
+uses a separate native wheel package so the main install path stays simple.
+
+```bash
+pip install "faster-qwen3-tts[ggml]"
+
+faster-qwen3-tts --backend ggml --quant BF16 design \
+  --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign \
+  --instruct "Warm, confident narrator" \
+  --text "Welcome to the show." \
+  --language English \
+  --output out.wav
+```
+
+The extra installs `qwentts-cpp-python>=0.3.0` from PyPI. That default wheel is
+CUDA 12.8. For CUDA 13 / DGX Spark, CUDA 12.4 targets, or Ubuntu 22.04 / older
+Linux hosts that need a `manylinux_2_35` wheel, install the matching wrapper
+wheel from the Hugging Face wheelhouse before installing the extra:
+
+```bash
+# Ubuntu 22.04 / older Linux with CUDA 12.8
+pip install "qwentts-cpp-python==0.3.0+cu128" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/tree/main/whl/cu128
+
+# CUDA 13 / DGX Spark
+pip install "qwentts-cpp-python==0.3.0+cu130" \
+  -f https://huggingface.co/datasets/andito/qwentts-cpp-python-wheels/tree/main/whl/cu130
+
+pip install "faster-qwen3-tts[ggml]"
+```
+
+See [`docs/ggml-backend.md`](docs/ggml-backend.md) for the native wrapper
+package and wheel selection details.
+
+The GGML backend caches raw reference audio as qwentts.cpp `.spk` speaker
+latents plus `.rvq` acoustic latents after the first clone request. You can also
+pass precomputed references directly:
+
+```bash
+faster-qwen3-tts --backend ggml --quant BF16 clone \
+  --model Qwen/Qwen3-TTS-12Hz-1.7B-Base \
+  --ref-spk freeman.spk \
+  --ref-rvq freeman.rvq \
+  --ref-text "$(cat freeman.txt)" \
+  --text "Cached references skip reference audio encoding on every request." \
+  --language English \
+  --output out.wav
+```
+
 ## Quick Start
 
 ### Python
@@ -119,15 +177,17 @@ faster-qwen3-tts serve \
 
 ### Demo UI
 
-A minimal web UI that streams audio in real time and shows TTFA and RTF live:
+A minimal web UI that streams audio in real time and shows TTFA and RTF live.
+It defaults to GGML/qwentts.cpp and includes a backend toggle for comparing it
+against the Torch CUDA-graph backend:
 
 ```bash
-pip install -e ".[demo]"
-python demo/server.py
+pip install -e ".[demo,ggml]"
+python demo/server.py --backend ggml
 # open http://localhost:7860
 ```
 
-Features: voice clone (upload any WAV or use your microphone), voice design (1.7B-VoiceDesign model), streaming/non-streaming toggle, adjustable chunk size, live TTFA/RTF metrics, WAV download.
+Features: voice clone (upload any WAV or use your microphone), voice design (1.7B-VoiceDesign model), GGML/Torch backend toggle, streaming/non-streaming toggle, adjustable chunk size, live TTFA/RTF metrics, WAV download.
 
 ### OpenAI-compatible API server
 
@@ -163,6 +223,7 @@ Benchmarks include tokenization + inference (apples-to-apples with baseline). RT
 | RTX 4090 | 0.82 | 800ms | **4.78** | **156ms** | 5.8x / 5.1x |
 | RTX 4060 (Windows) | 0.23 | 2,697ms | **2.26** | **413ms** | 9.8x / 6.5x |
 | H100 80GB HBM3 | 0.435 | 1,474ms | **3.884** | **228ms** | 8.9x / 6.5x |
+| Tesla T4 16GB | 0.467 | 1,671ms | **1.068** | **901ms** | 2.3x / 1.9x |
 
 ### 1.7B Model
 
@@ -173,6 +234,7 @@ Benchmarks include tokenization + inference (apples-to-apples with baseline). RT
 | RTX 4090 | 0.82 | 850ms | **4.22** | **174ms** | 5.1x / 4.9x |
 | RTX 4060 (Windows) | 0.23 | 2,905ms | **1.83** | **460ms** | 7.9x / 6.3x |
 | H100 80GB HBM3 | 0.439 | 1,525ms | **3.304** | **241ms** | 7.5x / 6.3x |
+| Tesla T4 16GB | 0.453 | 1,811ms | **0.925** | **1,096ms** | 2.0x / 1.7x |
 
 **Note:** Baseline TTFA values are **streaming TTFA** from the community `Qwen3-TTS-streaming` fork (which adds streaming) or from our **dynamic-cache parity streaming** path (no CUDA graphs) where available. The official `Qwen3-TTS` repo does **not** currently support streaming, so without a streaming baseline TTFA would be **time-to-full-audio**. CUDA graphs uses `generate_voice_clone_streaming(chunk_size=8)` for TTFA. Both include text tokenization for fair comparison. Speedup shows throughput / TTFA improvement. The streaming fork reports additional speedups that appear tied to `torch.compile`; we couldn’t reproduce those on Jetson-class devices where `torch.compile` isn’t available.
 
@@ -256,6 +318,7 @@ The original Qwen3TTS implementation supports two mode of generation. It either 
 The public API uses `non_streaming_mode=None` as a sentinel, which preserves each method's upstream default unless you override it explicitly.
 `generate_voice_clone` and `generate_voice_clone_streaming` resolve `None` to `False`, matching upstream step-by-step text feeding during decode.
 `generate_custom_voice`, `generate_custom_voice_streaming`, `generate_voice_design`, and `generate_voice_design_streaming` resolve `None` to `True`, matching the upstream CustomVoice and VoiceDesign defaults.
+The GGML backend currently has no qwentts.cpp ABI switch for step-by-step text feeding; passing `non_streaming_mode=False` emits a warning and qwentts.cpp uses its native prompt layout.
 
 **Performance impact (RTX 4090, 1.7B, ICL, chunk_size=8):** TTFA is unchanged (≈159ms ± 1ms), and RTF is effectively the same (nsm=False: 4.87 ± 0.01, nsm=True: 4.85 ± 0.01).
 
