@@ -37,7 +37,7 @@ if exist ".venv\Scripts\python.exe" (
         uv venv .venv --python 3.10
         echo Installing PyTorch with CUDA support...
         uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --python .venv\Scripts\python.exe
-        uv pip install -e . --python .venv\Scripts\python.exe
+        uv pip install -e ".[demo]" httpx livekit --python .venv\Scripts\python.exe
         
         echo Attempting to install flash-attn ^(optional^)...
         uv pip install flash-attn --python .venv\Scripts\python.exe 2>nul && echo   flash-attn installed || echo   flash-attn not available ^(ok, will use manual attention^)
@@ -47,7 +47,7 @@ if exist ".venv\Scripts\python.exe" (
         python -m pip install --upgrade pip
         echo Installing PyTorch with CUDA support...
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-        pip install -e .
+        pip install -e ".[demo]" httpx livekit
         
         echo Attempting to install flash-attn ^(optional^)...
         pip install flash-attn 2>nul && echo   flash-attn installed || echo   flash-attn not available ^(ok, will use manual attention^)
