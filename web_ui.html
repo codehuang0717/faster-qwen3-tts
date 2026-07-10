@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen3 TTS 流式测试</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #8b5cf6;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            margin: 2rem;
+            padding: 2.5rem;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        input[type="text"], 
+        textarea {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus, 
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .row {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .row .form-group {
+            flex: 1;
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .metrics-grid.visible {
+            opacity: 1;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Spinner */
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .visualizer {
+            width: 100%;
+            height: 60px;
+            margin-top: 2rem;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.2);
+            overflow: hidden;
+            display: none;
+        }
+        .visualizer.active {
+            display: block;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .error-message {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 1rem;
+            border-radius: 12px;
+            margin-top: 1rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Qwen3 TTS 实时推理测试</h1>
+
+        <div class="row">
+            <div class="form-group">
+                <label for="apiUrl">API URL</label>
+                <input type="text" id="apiUrl" value="http://localhost:7017/v1/audio/speech">
+            </div>
+            <div class="form-group">
+                <label for="voice">Voice Name (音色)</label>
+                <input type="text" id="voice" value="yingxue">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="form-group">
+                <label for="instructTemplate">语气指令模板 (Tone Templates)</label>
+                <select id="instructTemplate" style="width: 100%; padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-main); font-family: inherit; font-size: 1rem; transition: all 0.3s ease; box-sizing: border-box; outline: none;">
+                    <option value="" style="background: var(--bg-color);">默认 (无语气指令)</option>
+                    <optgroup label="情绪类 (Emotions)" style="background: var(--bg-color); color: var(--text-muted);">
+                        <option value="温柔，轻声细语，非常有耐心" style="background: var(--bg-color); color: var(--text-main);">温柔体贴 (Gentle & Patient)</option>
+                        <option value="非常激动，充满活力，语气高昂" style="background: var(--bg-color); color: var(--text-main);">兴奋激动 (Excited & Energetic)</option>
+                        <option value="有些伤心，低落，语气沉重，带着一点哭腔" style="background: var(--bg-color); color: var(--text-main);">伤心难过 (Sad & Depressed)</option>
+                        <option value="生气，愤怒，语速较快，咬牙切齿" style="background: var(--bg-color); color: var(--text-main);">愤怒生气 (Angry)</option>
+                        <option value="惊慌失措，语速极快，声音颤抖，非常害怕" style="background: var(--bg-color); color: var(--text-main);">恐惧惊慌 (Panicked)</option>
+                        <option value="语气轻蔑，带着嘲讽的笑意，傲慢不屑" style="background: var(--bg-color); color: var(--text-main);">傲慢嘲讽 (Sarcastic & Arrogant)</option>
+                    </optgroup>
+                    <optgroup label="场景/角色类 (Scenes & Roles)" style="background: var(--bg-color); color: var(--text-muted);">
+                        <option value="严肃的播音腔，字正腔圆，平稳大气" style="background: var(--bg-color); color: var(--text-main);">新闻播音 (News Broadcast)</option>
+                        <option value="低沉稳重，富有故事感，娓娓道来的纪录片解说" style="background: var(--bg-color); color: var(--text-main);">纪录片解说 (Documentary Narrator)</option>
+                        <option value="极度兴奋，语速飞快，充满激情，像体育比赛解说员" style="background: var(--bg-color); color: var(--text-main);">激情解说 (Sports Commentary)</option>
+                        <option value="轻松活泼，充满亲和力，电台深夜DJ风格" style="background: var(--bg-color); color: var(--text-main);">深夜电台DJ (Radio DJ)</option>
+                        <option value="可爱，俏皮，带点二次元元气少女的感觉，语调上扬" style="background: var(--bg-color); color: var(--text-main);">元气可爱 (Cute & Energetic)</option>
+                        <option value="声音极其刻意压低，悄悄话，像在耳边低语的ASMR" style="background: var(--bg-color); color: var(--text-main);">耳边低语 (Whispering ASMR)</option>
+                        <option value="压抑，低语，制造紧张恐怖的悬疑氛围" style="background: var(--bg-color); color: var(--text-main);">悬疑恐怖 (Suspenseful & Creepy)</option>
+                    </optgroup>
+                    <optgroup label="外语/方言风味 (Languages & Accents)" style="background: var(--bg-color); color: var(--text-muted);">
+                        <option value="Warm, confident narrator with slight British accent" style="background: var(--bg-color); color: var(--text-main);">带有英音的自信解说 (British Narrator)</option>
+                        <option value="Casual, energetic, American street style English" style="background: var(--bg-color); color: var(--text-main);">美式街头风英语 (American Street)</option>
+                    </optgroup>
+                    <option value="custom" style="background: var(--bg-color); color: var(--text-main);">自定义指令... (Custom)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="instructInput">当前语气指令 (可自由修改)</label>
+                <input type="text" id="instructInput" placeholder="在此输入或编辑语气指令，留空为默认" value="">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label for="textInput" style="margin-bottom: 0;">Text Input (输入文本)</label>
+                <select id="textTemplate" style="padding: 0.2rem 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 0.85rem; outline: none; cursor: pointer;">
+                    <option value="" style="background: var(--bg-color);">-- 选择文本示例 (Text Samples) --</option>
+                    <option value="这就是我的声音克隆效果，你觉得好听吗？我们现在正在测试流式传输的响应速度和首字延迟。" style="background: var(--bg-color);">默认测试文本 (Default)</option>
+                    <option value="亲爱的，今天工作辛苦啦，快闭上眼睛早点休息哦，做个好梦，晚安~" style="background: var(--bg-color);">温柔问候 (Gentle)</option>
+                    <option value="天哪！我们赢了！我们居然真的绝杀夺冠了！这简直不可思议！太棒了！" style="background: var(--bg-color);">激动狂喜 (Excited)</option>
+                    <option value="为什么...为什么会变成这样...我明明已经那么努力了，可是最后还是什么都没留住..." style="background: var(--bg-color);">伤心绝望 (Sad)</option>
+                    <option value="你到底在干什么？！跟你说了多少次了绝对不能碰那个开关，你把一切都毁了！" style="background: var(--bg-color);">愤怒责备 (Angry)</option>
+                    <option value="本台最新消息：今天上午，本市将迎来今年以来的最大降雨，请广大市民注意出行安全。" style="background: var(--bg-color);">新闻播音 (News)</option>
+                    <option value="晚上好，各位听众朋友。这里是深夜电台，我是你的老朋友。在这个安静的夜晚，让我们一起分享今天的故事。" style="background: var(--bg-color);">电台开场 (Radio DJ)</option>
+                    <option value="在广袤的非洲大草原上，随着旱季的到来，庞大的角马群再次开始了它们生命的远征。" style="background: var(--bg-color);">纪录片解说 (Documentary)</option>
+                    <option value="不要出声...千万别出声...它...它就在门外...我能听到它锋利的爪子划过地板的声音..." style="background: var(--bg-color);">悬疑恐怖 (Suspense)</option>
+                    <option value="Hello everyone, welcome back to the channel! Today we're going to dive into something really exciting." style="background: var(--bg-color);">英语频道开场 (English Intro)</option>
+                </select>
+            </div>
+            <textarea id="textInput" placeholder="请输入想要合成的文本...">这就是我的声音克隆效果，你觉得好听吗？我们现在正在测试流式传输的响应速度和首字延迟。</textarea>
+        </div>
+
+        <button id="generateBtn">
+            <span class="btn-text">开始生成音频 (Start Generation)</span>
+            <div class="spinner" id="spinner"></div>
+        </button>
+
+        <div class="error-message" id="errorMsg"></div>
+
+        <div class="visualizer" id="visualizerContainer">
+            <canvas id="visualizer"></canvas>
+        </div>
+
+        <div class="metrics-grid" id="metrics">
+            <div class="metric-card">
+                <div class="metric-value" id="ttfb">-- ms</div>
+                <div class="metric-label">首字延迟 (TTFB)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="totalTime">-- s</div>
+                <div class="metric-label">总生成耗时</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="audioDuration">-- s</div>
+                <div class="metric-label">音频总时长</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="rtf">--</div>
+                <div class="metric-label">实时率 (RTF)</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API
+        let audioContext;
+        let nextPlayTime = 0;
+        let analyser;
+        let dataArray;
+        let canvasCtx;
+        let animationId;
+
+        const generateBtn = document.getElementById('generateBtn');
+        const spinner = document.getElementById('spinner');
+        const btnText = document.querySelector('.btn-text');
+        const metricsGrid = document.getElementById('metrics');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        // Metrics elements
+        const ttfbEl = document.getElementById('ttfb');
+        const totalTimeEl = document.getElementById('totalTime');
+        const audioDurationEl = document.getElementById('audioDuration');
+        const rtfEl = document.getElementById('rtf');
+
+        // Canvas
+        const canvas = document.getElementById('visualizer');
+        const visualizerContainer = document.getElementById('visualizerContainer');
+
+        const instructTemplate = document.getElementById('instructTemplate');
+        const instructInput = document.getElementById('instructInput');
+        const textTemplate = document.getElementById('textTemplate');
+        const textInput = document.getElementById('textInput');
+        
+        instructTemplate.addEventListener('change', (e) => {
+            if (e.target.value === 'custom') {
+                instructInput.focus();
+            } else {
+                instructInput.value = e.target.value;
+            }
+        });
+
+        textTemplate.addEventListener('change', (e) => {
+            if (e.target.value !== '') {
+                textInput.value = e.target.value;
+                
+                // 自动选择合适的提示词模板(简单的启发式关联)
+                let matchedTone = "";
+                if (e.target.value.includes("晚安")) matchedTone = "温柔，轻声细语，非常有耐心";
+                else if (e.target.value.includes("赢了")) matchedTone = "非常激动，充满活力，语气高昂";
+                else if (e.target.value.includes("伤心") || e.target.value.includes("努力了")) matchedTone = "有些伤心，低落，语气沉重，带着一点哭腔";
+                else if (e.target.value.includes("干什么")) matchedTone = "生气，愤怒，语速较快，咬牙切齿";
+                else if (e.target.value.includes("本台")) matchedTone = "严肃的播音腔，字正腔圆，平稳大气";
+                else if (e.target.value.includes("深夜电台")) matchedTone = "轻松活泼，充满亲和力，电台深夜DJ风格";
+                else if (e.target.value.includes("大草原")) matchedTone = "低沉稳重，富有故事感，娓娓道来的纪录片解说";
+                else if (e.target.value.includes("出声")) matchedTone = "压抑，低语，制造紧张恐怖的悬疑氛围";
+                else if (e.target.value.includes("Hello")) matchedTone = "Warm, confident narrator with slight British accent";
+                
+                if (matchedTone) {
+                    instructTemplate.value = matchedTone;
+                    instructInput.value = matchedTone;
+                } else {
+                    instructTemplate.value = "";
+                    instructInput.value = "";
+                }
+            }
+        });
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.connect(audioContext.destination);
+                
+                canvasCtx = canvas.getContext('2d');
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+            }
+        }
+
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+
+        function drawVisualizer() {
+            if (!analyser) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            if (!dataArray) {
+                dataArray = new Uint8Array(bufferLength);
+            }
+            
+            animationId = requestAnimationFrame(drawVisualizer);
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+            
+            for(let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] / 2;
+                
+                // Gradient color
+                const r = barHeight + 25 * (i/bufferLength);
+                const g = 130 * (i/bufferLength);
+                const b = 246;
+                
+                canvasCtx.fillStyle = `rgb(${r},${g},${b})`;
+                canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                
+                x += barWidth + 1;
+            }
+        }
+
+        function playPCMChunk(pcmData) {
+            const float32Data = new Float32Array(pcmData.length);
+            for (let i = 0; i < pcmData.length; i++) {
+                float32Data[i] = pcmData[i] / 32768.0;
+            }
+            
+            const audioBuffer = audioContext.createBuffer(1, float32Data.length, 24000);
+            audioBuffer.getChannelData(0).set(float32Data);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(analyser); // Connect to analyser instead of destination
+
+            if (nextPlayTime < audioContext.currentTime) {
+                nextPlayTime = audioContext.currentTime + 0.05;
+            }
+
+            source.start(nextPlayTime);
+            nextPlayTime += audioBuffer.duration;
+            return audioBuffer.duration;
+        }
+
+        generateBtn.addEventListener('click', async () => {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const text = document.getElementById('textInput').value;
+            const voice = document.getElementById('voice').value;
+
+            if (!text.trim()) return;
+
+            // Reset UI
+            errorMsg.style.display = 'none';
+            generateBtn.disabled = true;
+            spinner.style.display = 'block';
+            btnText.textContent = '生成中...';
+            metricsGrid.classList.remove('visible');
+            
+            ttfbEl.textContent = '-- ms';
+            totalTimeEl.textContent = '-- s';
+            audioDurationEl.textContent = '-- s';
+            rtfEl.textContent = '--';
+
+            try {
+                initAudio();
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+                
+                nextPlayTime = audioContext.currentTime;
+                
+                visualizerContainer.classList.add('active');
+                if (!animationId) drawVisualizer();
+
+                const payload = {
+                    model: "tts-1",
+                    input: text,
+                    voice: voice,
+                    instruct: instructInput.value.trim(),
+                    response_format: "pcm" // Request raw PCM for Web Audio API
+                };
+
+                const startTime = performance.now();
+                let firstByteTime = null;
+                let totalAudioDuration = 0;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errText}`);
+                }
+
+                const reader = response.body.getReader();
+                let isDone = false;
+
+                while (!isDone) {
+                    const { value, done } = await reader.read();
+                    
+                    if (value && value.length > 0) {
+                        if (firstByteTime === null) {
+                            firstByteTime = performance.now();
+                            const ttfb = firstByteTime - startTime;
+                            ttfbEl.textContent = `${ttfb.toFixed(0)} ms`;
+                            metricsGrid.classList.add('visible');
+                        }
+                        
+                        // value is Uint8Array containing Int16 PCM data
+                        // Convert to Int16Array
+                        // Ensure byteLength is a multiple of 2
+                        const validLength = value.byteLength - (value.byteLength % 2);
+                        if (validLength > 0) {
+                            const pcm16 = new Int16Array(value.buffer, value.byteOffset, validLength / 2);
+                            const duration = playPCMChunk(pcm16);
+                            totalAudioDuration += duration;
+                            
+                            audioDurationEl.textContent = `${totalAudioDuration.toFixed(2)} s`;
+                        }
+                    }
+                    
+                    isDone = done;
+                }
+
+                const endTime = performance.now();
+                const totalTimeSec = (endTime - startTime) / 1000;
+                totalTimeEl.textContent = `${totalTimeSec.toFixed(2)} s`;
+                
+                const rtf = totalTimeSec / totalAudioDuration;
+                rtfEl.textContent = rtf.toFixed(3);
+
+            } catch (error) {
+                console.error("Error:", error);
+                errorMsg.innerHTML = error.message + "<br><br><b>提示：</b>如果是 Failed to fetch，请检查后端是否允许了跨域请求 (CORS)。我已经尝试修改后端的 fastapi 代码，请重新启动 run_api.bat。";
+                errorMsg.style.display = 'block';
+            } finally {
+                generateBtn.disabled = false;
+                spinner.style.display = 'none';
+                btnText.textContent = '开始生成音频 (Start Generation)';
+                
+                // Stop visualizer shortly after audio finishes playing
+                setTimeout(() => {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+                }, Math.max(0, (nextPlayTime - audioContext.currentTime + 0.5) * 1000));
+            }
+        });
+    </script>
+</body>
+</html>

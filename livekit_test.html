@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveKit TTS 传输测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #8b5cf6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            margin: 1.5rem;
+            padding: 2rem;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: -0.5rem;
+        }
+
+        /* Connection Status */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            font-size: 0.85rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--danger);
+            transition: background 0.3s;
+        }
+
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
+        .status-dot.connecting { background: var(--warning); animation: pulse 1s ease-in-out infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Chat Area */
+        .chat-area {
+            flex: 1;
+            min-height: 280px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .chat-area::-webkit-scrollbar { width: 6px; }
+        .chat-area::-webkit-scrollbar-track { background: transparent; }
+        .chat-area::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+
+        .msg {
+            max-width: 85%;
+            padding: 0.75rem 1rem;
+            border-radius: 16px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.system {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg.system .label {
+            font-size: 0.75rem;
+            color: var(--accent);
+            margin-bottom: 0.25rem;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            opacity: 0.5;
+        }
+
+        /* Input Area */
+        .input-area {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 0.85rem 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-area input:focus { border-color: var(--primary); }
+
+        .send-btn {
+            padding: 0.85rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+
+
+        /* Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .metrics-grid.visible { opacity: 1; }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 1rem 0.5rem;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .metric-card:hover { transform: translateY(-3px); background: rgba(255, 255, 255, 0.05); }
+        .metric-card.highlight { border-color: var(--warning); background: rgba(245, 158, 11, 0.05); }
+
+        .metric-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 0.3rem;
+        }
+
+        .metric-value.live { color: var(--success); }
+
+        .metric-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .section-label {
+            grid-column: 1 / -1;
+            font-size: 0.75rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+            padding-top: 0.25rem;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        /* Pipeline visualization */
+        .pipeline {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            padding: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .pipeline .step {
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s;
+        }
+
+        .pipeline .step.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .pipeline .arrow { color: rgba(255,255,255,0.2); }
+
+        /* History Table */
+        .history-section {
+            margin-top: 0.5rem;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-header h2 {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+
+        .clear-btn {
+            padding: 0.3rem 0.7rem;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 6px;
+            color: var(--danger);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .clear-btn:hover { background: rgba(239, 68, 68, 0.25); }
+
+        .history-table-wrap {
+            max-height: 200px;
+            overflow-y: auto;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .history-table-wrap::-webkit-scrollbar { width: 5px; }
+        .history-table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+
+        .history-table th {
+            position: sticky;
+            top: 0;
+            background: rgba(15, 23, 42, 0.95);
+            color: var(--text-muted);
+            padding: 0.5rem 0.4rem;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 1px solid var(--glass-border);
+            white-space: nowrap;
+        }
+
+        .history-table td {
+            padding: 0.4rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .history-table tr:hover td { background: rgba(255,255,255,0.03); }
+        .history-table .text-col { text-align: left; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .history-table .warn { color: var(--warning); }
+        .history-table .good { color: var(--success); }
+
+        /* Stutter monitor */
+        .stutter-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 1rem;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        .stutter-live-label {
+            font-weight: 600;
+            color: var(--danger);
+        }
+
+        .stutter-live-stats {
+            color: var(--text-muted);
+        }
+
+        .stutter-live-stats strong {
+            color: var(--text-main);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .visualizer-wrap {
+            width: 100%;
+            height: 70px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            display: none;
+        }
+
+        .visualizer-wrap.active { display: block; }
+        .visualizer-wrap canvas { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LiveKit 音频传输测试</h1>
+        <p class="subtitle">浏览器文字 → TTS → LiveKit AudioSource → WebRTC → 浏览器播放 (绕开 SIP)</p>
+
+        <div class="pipeline" id="pipeline">
+            <span class="step" id="step-input">📝 输入文字</span>
+            <span class="arrow">→</span>
+            <span class="step" id="step-tts">🔊 TTS 生成</span>
+            <span class="arrow">→</span>
+            <span class="step" id="step-livekit">📡 LiveKit</span>
+            <span class="arrow">→</span>
+            <span class="step" id="step-play">🎧 浏览器播放</span>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">未连接</span>
+        </div>
+
+        <div class="chat-area" id="chatArea">
+            <div class="empty-state">连接 LiveKit 后，在下方输入文字发送...</div>
+        </div>
+
+        <div class="visualizer-wrap" id="vizWrap">
+            <canvas id="vizCanvas"></canvas>
+        </div>
+
+        <div class="stutter-bar" id="stutterBar" style="display:none;">
+            <span class="stutter-live-label">🔴 实时卡顿检测</span>
+            <span class="stutter-live-stats">
+                卡顿: <strong id="stutterCountLive">0</strong> 次 &nbsp;|&nbsp;
+                总断音: <strong id="stutterGapLive">0</strong> ms &nbsp;|&nbsp;
+                最长断音: <strong id="stutterMaxLive">0</strong> ms
+            </span>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="textInput" placeholder="输入文字，直接当作 AI 回复发给 TTS..." disabled>
+            <button class="send-btn" id="sendBtn" disabled>发送</button>
+        </div>
+
+        <div class="metrics-grid" id="metricsGrid">
+            <div class="metric-card">
+                <div class="metric-value" id="metricTTFB">--</div>
+                <div class="metric-label">TTS TTFB</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="metricTotal">--</div>
+                <div class="metric-label">总耗时</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="metricAudio">--</div>
+                <div class="metric-label">音频时长</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="metricRTF">--</div>
+                <div class="metric-label">RTF</div>
+            </div>
+
+            <div class="section-label">Jitter 监控</div>
+
+            <div class="metric-card highlight">
+                <div class="metric-value" id="metricTtsJitter">--</div>
+                <div class="metric-label">TTS Chunk 抖动</div>
+            </div>
+            <div class="metric-card highlight">
+                <div class="metric-value" id="metricPushJitter">--</div>
+                <div class="metric-label">Push 帧抖动</div>
+            </div>
+            <div class="metric-card highlight">
+                <div class="metric-value live" id="metricWebrtcJitter">--</div>
+                <div class="metric-label">WebRTC Jitter ⚡</div>
+            </div>
+            <div class="metric-card highlight">
+                <div class="metric-value live" id="metricPktLoss">--</div>
+                <div class="metric-label">丢包数</div>
+            </div>
+        </div>
+
+        <div class="history-section" id="historySection" style="display:none;">
+            <div class="history-header">
+                <h2>📋 历史记录</h2>
+                <button class="clear-btn" id="clearHistoryBtn">清空</button>
+            </div>
+            <div class="history-table-wrap">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>文本</th>
+                            <th>TTFB</th>
+                            <th>RTF</th>
+                            <th>🔴 卡顿</th>
+                            <th>断音总计</th>
+                            <th>最长断音</th>
+                            <th>TTS抖动</th>
+                            <th>WebRTC</th>
+                            <th>丢包</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { Room, RoomEvent, Track } = LivekitClient;
+
+        // DOM
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const chatArea = document.getElementById('chatArea');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const vizWrap = document.getElementById('vizWrap');
+        const vizCanvas = document.getElementById('vizCanvas');
+        const metricsGrid = document.getElementById('metricsGrid');
+
+        // Pipeline steps
+        const steps = {
+            input: document.getElementById('step-input'),
+            tts: document.getElementById('step-tts'),
+            livekit: document.getElementById('step-livekit'),
+            play: document.getElementById('step-play'),
+        };
+
+        // History
+        const historySection = document.getElementById('historySection');
+        const historyBody = document.getElementById('historyBody');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        let historyCount = 0;
+        let pendingTTFB = null;
+        let pendingText = '';
+
+        clearHistoryBtn.addEventListener('click', () => {
+            historyBody.innerHTML = '';
+            historyCount = 0;
+            historySection.style.display = 'none';
+        });
+
+        function addHistoryRow(data) {
+            historyCount++;
+            historySection.style.display = '';
+            const rtf = data.rtf;
+            const rtfClass = rtf > 1 ? 'warn' : 'good';
+            const stutterClass = (data.stutters || 0) > 0 ? 'warn' : 'good';
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${historyCount}</td>
+                <td class="text-col" title="${data.text}">${data.text}</td>
+                <td>${data.ttfb} ms</td>
+                <td class="${rtfClass}">${data.rtf}</td>
+                <td class="${stutterClass}">${data.stutters || 0}</td>
+                <td class="${stutterClass}">${data.gapMs || 0} ms</td>
+                <td>${data.maxGap || 0} ms</td>
+                <td>${data.ttsJitter} ms</td>
+                <td>${data.webrtcJitter}</td>
+                <td>${data.pktLoss}</td>
+            `;
+            historyBody.appendChild(row);
+            row.scrollIntoView({ block: 'nearest' });
+        }
+
+        // Metrics
+        const metricEls = {
+            ttfb: document.getElementById('metricTTFB'),
+            total: document.getElementById('metricTotal'),
+            audio: document.getElementById('metricAudio'),
+            rtf: document.getElementById('metricRTF'),
+            ttsJitter: document.getElementById('metricTtsJitter'),
+            pushJitter: document.getElementById('metricPushJitter'),
+            webrtcJitter: document.getElementById('metricWebrtcJitter'),
+            pktLoss: document.getElementById('metricPktLoss'),
+        };
+
+        // WebRTC stats polling
+        let statsIntervalId = null;
+
+        async function pollWebRTCStats() {
+            if (!room) return;
+            try {
+                // Access the subscriber PeerConnection via LiveKit internals
+                const pc = room.engine?.subscriber?.pc
+                    || room.engine?.pcManager?.subscriber?.pc;
+                if (!pc) return;
+
+                const stats = await pc.getStats();
+                stats.forEach(report => {
+                    if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                        const jitterMs = (report.jitter || 0) * 1000;
+                        metricEls.webrtcJitter.textContent = jitterMs.toFixed(1) + ' ms';
+                        metricEls.pktLoss.textContent = report.packetsLost || 0;
+                    }
+                });
+            } catch (e) {
+                // Silently fail — internal API may vary
+            }
+        }
+
+        function startStatsPolling() {
+            if (statsIntervalId) return;
+            statsIntervalId = setInterval(pollWebRTCStats, 500);
+        }
+
+        function stopStatsPolling() {
+            if (statsIntervalId) { clearInterval(statsIntervalId); statsIntervalId = null; }
+        }
+
+        // Audio visualizer + stutter detection
+        let audioCtx, analyser, canvasCtx, animId;
+        let timeDomainData; // for RMS calculation
+
+        // Stutter detection state
+        let isPlaybackActive = false;
+        let stutterCount = 0;
+        let totalGapMs = 0;
+        let maxGapMs = 0;
+        let currentGapStartTime = null;
+        let lastFrameTime = 0;
+        const SILENCE_THRESHOLD = 0.008; // RMS below this = silence
+        const MIN_GAP_MS = 60; // gaps shorter than this are ignored
+        // Scrolling energy history for the timeline
+        let energyHistory = [];
+        const MAX_ENERGY_POINTS = 300;
+
+        const stutterCountEl = document.getElementById('stutterCountLive');
+        const stutterGapEl = document.getElementById('stutterGapLive');
+        const stutterMaxEl = document.getElementById('stutterMaxLive');
+        const stutterBar = document.getElementById('stutterBar');
+
+        function resetStutterState() {
+            stutterCount = 0;
+            totalGapMs = 0;
+            maxGapMs = 0;
+            currentGapStartTime = null;
+            energyHistory = [];
+            stutterCountEl.textContent = '0';
+            stutterGapEl.textContent = '0';
+            stutterMaxEl.textContent = '0';
+        }
+
+        function initVisualizer() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.3;
+                analyser.connect(audioCtx.destination);
+            }
+            canvasCtx = vizCanvas.getContext('2d');
+            vizCanvas.width = vizCanvas.offsetWidth * 2;
+            vizCanvas.height = vizCanvas.offsetHeight * 2;
+            canvasCtx.scale(2, 2); // HiDPI
+        }
+
+        function drawViz() {
+            if (!analyser) return;
+            animId = requestAnimationFrame(drawViz);
+
+            const now = performance.now();
+            // Throttle to ~30fps
+            if (now - lastFrameTime < 33) return;
+            lastFrameTime = now;
+
+            // Calculate RMS energy from time-domain data
+            if (!timeDomainData) timeDomainData = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(timeDomainData);
+            let sumSq = 0;
+            for (let i = 0; i < timeDomainData.length; i++) {
+                sumSq += timeDomainData[i] * timeDomainData[i];
+            }
+            const rms = Math.sqrt(sumSq / timeDomainData.length);
+
+            // Stutter detection
+            if (isPlaybackActive) {
+                const isSilent = rms < SILENCE_THRESHOLD;
+                if (isSilent) {
+                    if (currentGapStartTime === null) {
+                        currentGapStartTime = now;
+                    }
+                } else {
+                    if (currentGapStartTime !== null) {
+                        const gapDuration = now - currentGapStartTime;
+                        if (gapDuration >= MIN_GAP_MS) {
+                            stutterCount++;
+                            totalGapMs += Math.round(gapDuration);
+                            if (gapDuration > maxGapMs) maxGapMs = Math.round(gapDuration);
+                            stutterCountEl.textContent = stutterCount;
+                            stutterGapEl.textContent = Math.round(totalGapMs);
+                            stutterMaxEl.textContent = Math.round(maxGapMs);
+                        }
+                        currentGapStartTime = null;
+                    }
+                }
+            }
+
+            // Record energy for timeline
+            energyHistory.push({ rms, isSilent: rms < SILENCE_THRESHOLD, isStutter: isPlaybackActive && rms < SILENCE_THRESHOLD });
+            if (energyHistory.length > MAX_ENERGY_POINTS) energyHistory.shift();
+
+            // Draw scrolling timeline
+            const w = vizCanvas.offsetWidth;
+            const h = vizCanvas.offsetHeight;
+            canvasCtx.clearRect(0, 0, w, h);
+
+            // Background
+            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            canvasCtx.fillRect(0, 0, w, h);
+
+            // Threshold line
+            const thresholdY = h - (SILENCE_THRESHOLD * h * 8);
+            canvasCtx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+            canvasCtx.lineWidth = 1;
+            canvasCtx.setLineDash([4, 4]);
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(0, thresholdY);
+            canvasCtx.lineTo(w, thresholdY);
+            canvasCtx.stroke();
+            canvasCtx.setLineDash([]);
+
+            // Draw energy bars
+            const barW = w / MAX_ENERGY_POINTS;
+            for (let i = 0; i < energyHistory.length; i++) {
+                const e = energyHistory[i];
+                const barH = Math.min(e.rms * h * 8, h);
+
+                if (e.isStutter) {
+                    // Red background for stutter regions
+                    canvasCtx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+                    canvasCtx.fillRect(i * barW, 0, barW, h);
+                    canvasCtx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+                } else {
+                    // Gradient from blue to purple based on energy
+                    const intensity = Math.min(e.rms * 10, 1);
+                    const r = 59 + intensity * 80;
+                    const g = 130 * intensity;
+                    const b = 246;
+                    canvasCtx.fillStyle = `rgb(${r},${g},${b})`;
+                }
+                canvasCtx.fillRect(i * barW, h - barH, barW - 0.5, barH);
+            }
+
+            // Label
+            canvasCtx.fillStyle = 'rgba(255,255,255,0.3)';
+            canvasCtx.font = '10px Inter, sans-serif';
+            canvasCtx.fillText('← 音频能量时间线 (红色 = 断音)', 6, 12);
+        }
+
+        function setStep(name) {
+            Object.values(steps).forEach(s => s.classList.remove('active'));
+            if (name && steps[name]) steps[name].classList.add('active');
+        }
+
+        function addMessage(text, type = 'user') {
+            // Clear empty state
+            const empty = chatArea.querySelector('.empty-state');
+            if (empty) empty.remove();
+
+            const div = document.createElement('div');
+            div.className = `msg ${type}`;
+            if (type === 'system') {
+                div.innerHTML = `<div class="label">🔊 TTS via LiveKit</div>${text}`;
+            } else {
+                div.textContent = text;
+            }
+            chatArea.appendChild(div);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        // ── LiveKit Connection ──
+        let room;
+
+        async function connect() {
+            statusDot.className = 'status-dot connecting';
+            statusText.textContent = '正在连接 LiveKit...';
+
+            try {
+                const resp = await fetch('/token');
+                const { token, url } = await resp.json();
+
+                room = new Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+
+                // Audio track subscribed → play it
+                room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === Track.Kind.Audio) {
+                        console.log('Audio track subscribed from:', participant.identity);
+                        setStep('play');
+                        vizWrap.classList.add('active');
+
+                        const el = track.attach();
+                        el.id = 'lk-audio';
+                        // Remove old audio elements
+                        document.querySelectorAll('#lk-audio').forEach(e => e.remove());
+                        document.body.appendChild(el);
+
+                        // Start polling WebRTC stats
+                        startStatsPolling();
+
+                        // Activate stutter detection
+                        isPlaybackActive = true;
+                        stutterBar.style.display = '';
+
+                        // Connect to visualizer
+                        try {
+                            initVisualizer();
+                            if (audioCtx.state === 'suspended') audioCtx.resume();
+                            const source = audioCtx.createMediaElementSource(el);
+                            source.connect(analyser);
+                            if (!animId) drawViz();
+                        } catch (e) {
+                            console.warn('Visualizer setup failed:', e);
+                        }
+                    }
+                });
+
+                room.on(RoomEvent.TrackUnsubscribed, (track) => {
+                    if (track.kind === Track.Kind.Audio) {
+                        track.detach().forEach(el => el.remove());
+                        setStep(null);
+                        isPlaybackActive = false;
+                        // Do one final stats poll, then stop
+                        pollWebRTCStats().then(() => stopStatsPolling());
+                        setTimeout(() => {
+                            if (animId) { cancelAnimationFrame(animId); animId = null; }
+                            if (canvasCtx) {
+                                const w = vizCanvas.offsetWidth;
+                                const h = vizCanvas.offsetHeight;
+                                canvasCtx.clearRect(0, 0, w, h);
+                            }
+                            vizWrap.classList.remove('active');
+                        }, 500);
+                    }
+                });
+
+                // Data channel messages (metrics from agent)
+                room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+                    try {
+                        const msg = JSON.parse(new TextDecoder().decode(payload));
+                        if (msg.type === 'ttfb') {
+                            pendingTTFB = msg.value;
+                            metricEls.ttfb.textContent = msg.value + ' ms';
+                            metricsGrid.classList.add('visible');
+                            setStep('livekit');
+                        } else if (msg.type === 'done') {
+                            const rtfVal = (msg.total_ms / 1000 / msg.audio_s).toFixed(3);
+                            metricEls.total.textContent = msg.total_ms + ' ms';
+                            metricEls.audio.textContent = msg.audio_s + ' s';
+                            metricEls.rtf.textContent = rtfVal;
+                            metricEls.ttsJitter.textContent = (msg.tts_chunk_jitter_ms || 0) + ' ms';
+                            metricEls.pushJitter.textContent = (msg.push_jitter_ms || 0) + ' ms';
+
+                            // Record to history (including stutter data)
+                            addHistoryRow({
+                                text: pendingText,
+                                ttfb: pendingTTFB ?? '--',
+                                total: msg.total_ms,
+                                audio: msg.audio_s,
+                                rtf: rtfVal,
+                                ttsJitter: msg.tts_chunk_jitter_ms || 0,
+                                pushJitter: msg.push_jitter_ms || 0,
+                                webrtcJitter: metricEls.webrtcJitter.textContent,
+                                pktLoss: metricEls.pktLoss.textContent,
+                                stutters: stutterCount,
+                                gapMs: Math.round(totalGapMs),
+                                maxGap: Math.round(maxGapMs),
+                            });
+                            pendingTTFB = null;
+
+                            sendBtn.disabled = false;
+                            textInput.disabled = false;
+                        }
+                    } catch (e) {}
+                });
+
+                room.on(RoomEvent.Disconnected, () => {
+                    statusDot.className = 'status-dot';
+                    statusText.textContent = '已断开';
+                    sendBtn.disabled = true;
+                    textInput.disabled = true;
+                });
+
+                await room.connect(url, token);
+
+                statusDot.className = 'status-dot connected';
+                statusText.textContent = `已连接 — Room: ${room.name}`;
+                textInput.disabled = false;
+                sendBtn.disabled = false;
+                textInput.focus();
+            } catch (e) {
+                statusDot.className = 'status-dot';
+                statusText.textContent = '连接失败: ' + e.message;
+                console.error('Connection failed:', e);
+            }
+        }
+
+        // ── Send Text ──
+        async function sendText() {
+            const text = textInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            addMessage(text, 'system');
+            pendingText = text;
+            textInput.value = '';
+            sendBtn.disabled = true;
+            textInput.disabled = true;
+            setStep('input');
+
+            // Reset metrics
+            Object.values(metricEls).forEach(el => el.textContent = '--');
+            metricsGrid.classList.remove('visible');
+            stopStatsPolling();
+            resetStutterState();
+
+            try {
+                setStep('tts');
+                const resp = await fetch('/synthesize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+            } catch (e) {
+                addMessage('❌ 发送失败: ' + e.message, 'system');
+                sendBtn.disabled = false;
+                textInput.disabled = false;
+                setStep(null);
+            }
+        }
+
+        sendBtn.addEventListener('click', sendText);
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !sendBtn.disabled) sendText();
+        });
+
+        // Auto-connect on page load
+        connect();
+    </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+    "model": "tts-1",
+    "input": "Testing the streaming API. Hello from Antigravity!",
+    "voice": "alloy",
+    "response_format": "wav"
+}
