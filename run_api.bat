@@ -1,6 +1,6 @@
 @echo off
 set "VENV_PYTHON=%~dp0.venv\Scripts\python.exe"
-set "REPO_DIR=%~dp0faster-qwen3-tts"
+set "REPO_DIR=%~dp0"
 set "VOICES_JSON=%~dp0voices.json"
 
 cd /d "%REPO_DIR%"
